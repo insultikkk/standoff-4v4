@@ -99,6 +99,7 @@
   .match h4{margin:10px 10px 0;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
   .match h4.ct{color:var(--ct)} .match h4.t{color:var(--t)}
   .match h4 .w{color:var(--ok);margin-left:6px}
+  .trial{display:inline-block;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,.12);color:#e4e4e7;font-weight:600;letter-spacing:.06em;margin-right:4px}
   .mvp{color:#ffcc66;font-size:11px;font-weight:800;margin-left:4px}
   button:focus-visible{outline:2px solid var(--line2);outline-offset:2px}
 </style>
@@ -261,7 +262,8 @@ document.getElementById('reset').onclick = () => confirm('Очистить ме�
 function renderMatches(all){
   const list = Object.values(all || {}).sort((a, b) => b.ts - a.ts);
   const stats = {};
-  list.forEach(m => (m.players || []).forEach(p => {
+  // пробные катки показываем в истории, но в топ не считаем
+  list.filter(m => !m.trial).forEach(m => (m.players || []).forEach(p => {
     const s = stats[p.name] = stats[p.name] || { name: p.name, k: 0, d: 0, a: 0, g: 0, w: 0 };
     s.k += p.k; s.d += p.d; s.a += p.a; s.g++;
     if ((p.team === 'ct' && m.ct > m.t) || (p.team === 't' && m.t > m.ct)) s.w++;
@@ -271,7 +273,7 @@ function renderMatches(all){
     ? `<table><tr><th>Игрок</th><th>Каток</th><th>Побед</th><th>K</th><th>D</th><th>A</th><th>K/D</th></tr>` +
       top.map((s, i) => `<tr class="${i ? '' : 'gold'}"><td class="nm"><span class="pos">${i + 1}</span>${escape(s.name)}</td>
         <td>${s.g}</td><td>${s.w}</td><td>${s.k}</td><td>${s.d}</td><td>${s.a}</td><td>${(s.k / (s.d || 1)).toFixed(2)}</td></tr>`).join('') + '</table>'
-    : '<i style="color:var(--dim);padding:10px;display:block">Каток ещё не было</i>';
+    : '<i style="color:var(--dim);padding:10px;display:block">Пока только пробные катки — топ начнётся с первой настоящей</i>';
 
   document.getElementById('history').innerHTML = list.map(m => {
     const ps = m.players || [];
@@ -286,7 +288,7 @@ function renderMatches(all){
     };
     const img = MAPS.includes(m.map) ? `style="background-image:url(maps/${m.map.toLowerCase()}.webp)"` : '';
     return `<div class="card match"><div class="head" ${img}>
-      <div><div class="t1">Катка #${m.n} · ${new Date(m.ts).toLocaleDateString('ru')}</div><div class="t2">${escape(m.map)}</div></div>
+      <div><div class="t1">${m.trial ? '<span class="trial">пробная</span> ' : ''}Катка #${m.n} · ${new Date(m.ts).toLocaleDateString('ru')}</div><div class="t2">${escape(m.map)}</div></div>
       <div class="score"><span class="ct">${m.ct}</span> : <span class="t">${m.t}</span></div></div>
       <div class="sides">${side('ct')}${side('t')}</div></div>`;
   }).join('');
