@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Standoff 4v4</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#111;color:#eee;display:flex;flex-direction:column;align-items:center;padding:16px}
+  h1{margin:8px 0 16px}
+  #name{padding:10px;font-size:16px;border-radius:8px;border:1px solid #444;background:#222;color:#eee;width:min(320px,100%)}
+  .teams{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+  .team{background:#1b1b1b;border-radius:12px;padding:12px;width:min(300px,100%)}
+  .team h2{margin:0 0 8px;text-align:center}
+  .ct h2{color:#4ea3ff}.t h2{color:#ffb347}
+  .slot{display:block;width:100%;margin:6px 0;padding:14px;font-size:16px;border-radius:8px;border:1px dashed #555;background:#222;color:#888;cursor:pointer;text-align:left}
+  .slot.taken{border-style:solid;color:#eee;background:#2a2a2a;cursor:default}
+  .slot.mine{border-color:#4caf50;cursor:pointer}
+  #reset{margin-top:24px;background:none;border:1px solid #733;color:#c66;padding:8px 14px;border-radius:8px;cursor:pointer}
+  #status{margin-top:8px;color:#888;font-size:14px}
+</style>
+</head>
+<body>
+<h1>Standoff 2 — 4 на 4</h1>
+<input id="name" placeholder="Твой ник" maxlength="20">
+<div id="status">Подключение…</div>
+<div class="teams" id="teams"></div>
+<button id="reset">Очистить всё</button>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+// Вставь сюда свой конфиг из Firebase Console → Project settings → Your apps → Web app
+const firebaseConfig = {
+  apiKey: "PASTE_HERE",
+  authDomain: "PASTE_HERE.firebaseapp.com",
+  databaseURL: "https://PASTE_HERE-default-rtdb.firebaseio.com",
+  projectId: "PASTE_HERE",
+  appId: "PASTE_HERE"
+};
+firebase.initializeApp(firebaseConfig);
+const ref = firebase.database().ref('lobby');
+
+const me = localStorage.getItem('uid') || Math.random().toString(36).slice(2);
+localStorage.setItem('uid', me);
+const nameEl = document.getElementById('name');
+nameEl.value = localStorage.getItem('name') || '';
+nameEl.oninput = () => localStorage.setItem('name', nameEl.value.trim());
+
+const TEAMS = [['ct','Спецназ'],['t','Террористы']];
+const SLOTS = TEAMS.flatMap(([t]) => [0,1,2,3].map(i => t + i));
+let state = {};
+
+function render(){
+  document.getElementById('teams').innerHTML = TEAMS.map(([t,label]) =>
+    `<div class="team ${t}"><h2>${label}</h2>` +
+    [0,1,2,3].map(i => {
+      const s = state[t+i];
+      const cls = s ? 'slot taken' + (s.uid === me ? ' mine' : '') : 'slot';
+      const txt = s ? escape(s.name) + (s.uid === me ? ' (выйти)' : '') : '+ Занять место';
+      return `<button class="${cls}" data-id="${t+i}">${txt}</button>`;
+    }).join('') + '</div>').join('');
+  const n = Object.keys(state).length;
+  document.getElementById('status').textContent = `Игроков: ${n}/8` + (n === 8 ? ' — команда собрана!' : '');
+}
+const escape = s => String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+
+document.getElementById('teams').onclick = e => {
+  const id = e.target.dataset && e.target.dataset.id;
+  if (!SLOTS.includes(id)) return;
+  const s = state[id];
+  if (s && s.uid === me) return ref.child(id).remove();
+  if (s) return;
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return alert('Сначала напиши ник'); }
+  // убираем себя с прошлого места, потом атомарно занимаем новое (если его не успел занять другой)
+  SLOTS.forEach(k => state[k] && state[k].uid === me && ref.child(k).remove());
+  ref.child(id).transaction(cur => cur ? undefined : { name, uid: me, ts: Date.now() });
+};
+
+document.getElementById('reset').onclick = () => confirm('Очистить все места?') && ref.remove();
+
+ref.on('value', snap => { state = snap.val() || {}; render(); },
+  err => document.getElementById('status').textContent = 'Ошибка Firebase: ' + err.message);
+render();
+</script>
+</body>
+</html>
