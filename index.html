@@ -23,6 +23,18 @@
   .map.top span{color:#ffcc66;font-weight:bold}
   #reset{margin-top:24px;background:none;border:1px solid #733;color:#c66;padding:8px 14px;border-radius:8px;cursor:pointer}
   #status{margin-top:8px;color:#888;font-size:14px}
+  #status.go{color:#4caf50;font-weight:bold;font-size:16px}
+  #ready{margin-top:16px;padding:12px 28px;font-size:17px;border-radius:10px;border:none;background:#4caf50;color:#fff;cursor:pointer}
+  #ready.on{background:#2a2a2a;border:1px solid #4caf50;color:#8fd694}
+  #chat{width:min(620px,100%);background:#1b1b1b;border-radius:12px;padding:10px;box-sizing:border-box}
+  #tabs button{background:none;border:none;color:#888;padding:6px 12px;font-size:15px;cursor:pointer;border-bottom:2px solid transparent}
+  #tabs button.on{color:#eee;border-bottom-color:#4caf50}
+  #msgs{height:220px;overflow-y:auto;padding:8px 4px;font-size:14px;line-height:1.5;word-wrap:break-word}
+  #msgs i{color:#666}
+  #msgs b.ct{color:#4ea3ff} #msgs b.t{color:#ffb347} #msgs b{color:#aaa}
+  #send{display:flex;gap:6px}
+  #msg{flex:1;min-width:0;padding:10px;font-size:15px;border-radius:8px;border:1px solid #444;background:#222;color:#eee}
+  #send button{padding:0 16px;border:none;border-radius:8px;background:#4caf50;color:#fff;font-size:16px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -30,6 +42,13 @@
 <input id="name" placeholder="Твой ник" maxlength="20">
 <div id="status">Подключение…</div>
 <div class="teams" id="teams"></div>
+<button id="ready" hidden>Я готов</button>
+<h2 class="maps-title">Чат</h2>
+<div id="chat">
+  <div id="tabs"><button data-ch="all">Все</button><button data-ch="team">Команда</button></div>
+  <div id="msgs"></div>
+  <form id="send"><input id="msg" maxlength="200" placeholder="Сообщение…" autocomplete="off"><button>➤</button></form>
+</div>
 <h2 class="maps-title">Какие карты хотите? (жми — голос, ещё раз — убрать)</h2>
 <div id="maps"></div>
 <button id="reset">Очистить всё</button>
@@ -59,7 +78,7 @@ function render(){
     [0,1,2,3].map(i => {
       const s = state[t+i];
       const cls = s ? 'slot taken' + (s.uid === me ? ' mine' : '') : 'slot';
-      const txt = s ? escape(s.name) + (s.uid === me ? ' (выйти)' : '') : '+ Занять место';
+      const txt = s ? (s.ready ? '✅ ' : '⏳ ') + escape(s.name) + (s.uid === me ? ' (выйти)' : '') : '+ Занять место';
       return `<button class="${cls}" data-id="${t+i}">${txt}</button>`;
     }).join('') + '</div>').join('');
   const votes = state.maps || {};
@@ -72,7 +91,27 @@ function render(){
       `<small>${Object.values(v).map(escape).join(', ')}</small></button>`;
   }).join('');
   const n = SLOTS.filter(k => state[k]).length;
-  document.getElementById('status').textContent = `Игроков: ${n}/8` + (n === 8 ? ' — команда собрана!' : '');
+  const ready = SLOTS.filter(k => state[k] && state[k].ready).length;
+  const st = document.getElementById('status');
+  st.textContent = `Игроков: ${n}/8 · готовы: ${ready}/${n}` + (ready === 8 ? ' — ВСЕ ГОТОВЫ, заходите в игру!' : n === 8 ? ' — ждём готовность' : '');
+  st.className = ready === 8 ? 'go' : '';
+  const mine = mySlot(), rb = document.getElementById('ready');
+  rb.hidden = !mine;
+  if (mine) { rb.textContent = state[mine].ready ? '✅ Готов (нажми, чтобы отменить)' : 'Я готов'; rb.className = state[mine].ready ? 'on' : ''; }
+  renderChat();
+}
+const mySlot = () => SLOTS.find(k => state[k] && state[k].uid === me);
+
+let ch = 'all';
+const chatKey = () => ch === 'all' ? 'all' : (mySlot() || '').replace(/\d/, '');
+function renderChat(){
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.ch === ch));
+  const key = chatKey(), box = document.getElementById('msgs');
+  if (!key) { box.innerHTML = '<i>Займи место в команде, чтобы писать своим</i>'; return; }
+  const list = Object.entries((state.chat || {})[key] || {}).sort(([a],[b]) => a < b ? -1 : 1);
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  box.innerHTML = list.map(([, m]) => `<div><b class="${m.team || ''}">${escape(m.name)}:</b> ${escape(m.text)}</div>`).join('') || '<i>Пока пусто</i>';
+  if (atBottom) box.scrollTop = box.scrollHeight;
 }
 const escape = s => String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
 
@@ -98,7 +137,30 @@ document.getElementById('maps').onclick = e => {
   (state.maps && state.maps[b.dataset.map] && state.maps[b.dataset.map][me]) ? r.remove() : r.set(name);
 };
 
-document.getElementById('reset').onclick = () => confirm('Очистить все места?') && ref.remove();
+document.getElementById('ready').onclick = () => {
+  const s = mySlot();
+  if (s) ref.child(s + '/ready').set(!state[s].ready);
+};
+
+document.getElementById('tabs').onclick = e => {
+  if (e.target.dataset.ch) { ch = e.target.dataset.ch; renderChat(); }
+};
+
+document.getElementById('send').onsubmit = e => {
+  e.preventDefault();
+  const input = document.getElementById('msg'), text = input.value.trim(), key = chatKey();
+  if (!text || !key) return;
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return alert('Сначала напиши ник'); }
+  const team = (mySlot() || '').replace(/\d/, '');
+  ref.child('chat/' + key).push({ name, team, text, uid: me });
+  input.value = '';
+  // shortcut: чистим чат с клиента, держим последние 50; если будет спам — переносить в Cloud Function
+  const keys = Object.keys((state.chat || {})[key] || {}).sort();
+  keys.slice(0, Math.max(0, keys.length - 49)).forEach(k => ref.child('chat/' + key + '/' + k).remove());
+};
+
+document.getElementById('reset').onclick = () => confirm('Очистить места, голоса и чат?') && ref.remove();
 
 ref.on('value', snap => { state = snap.val() || {}; render(); },
   err => document.getElementById('status').textContent = 'Ошибка Firebase: ' + err.message);
