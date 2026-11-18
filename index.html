@@ -106,7 +106,7 @@
 <body>
 <div class="wrap">
 <img class="banner" src="banner.svg" alt="Standoff 2 — 4 на 4">
-<input id="name" placeholder="Твой ник" maxlength="20">
+<input id="name" placeholder="Твой ник в Standoff 2" maxlength="20" autocomplete="off" spellcheck="false">
 <div id="status">Подключение…</div>
 <div class="teams" id="teams"></div>
 <button id="ready" hidden>Я готов</button>
@@ -191,6 +191,15 @@ function renderChat(){
 }
 const escape = s => String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
 
+// ник должен совпадать с игровым — спрашиваем 2 раза, один раз на каждый новый ник
+function confirmNick(name){
+  try { if (localStorage.getItem('confirmedNick') === name) return true; } catch {}
+  if (!confirm(`Твой ник в Standoff 2: «${name}»\n\nТочно написал правильно, как в игре?`)) return false;
+  if (!confirm(`Проверь ещё раз, буква в букву:\n\n«${name}»\n\nТочно правильно?`)) return false;
+  try { localStorage.setItem('confirmedNick', name); } catch {}
+  return true;
+}
+
 document.getElementById('teams').onclick = e => {
   const b = e.target.closest('[data-id]'), id = b && b.dataset.id;
   if (!SLOTS.includes(id)) return;
@@ -198,7 +207,8 @@ document.getElementById('teams').onclick = e => {
   if (s && s.uid === me) return ref.child(id).remove();
   if (s) return;
   const name = nameEl.value.trim();
-  if (!name) { nameEl.focus(); return alert('Сначала напиши ник'); }
+  if (!name) { nameEl.focus(); return alert('Сначала напиши свой ник в Standoff 2'); }
+  if (!confirmNick(name)) return nameEl.focus();
   // убираем себя с прошлого места, потом атомарно занимаем новое (если его не успел занять другой)
   SLOTS.forEach(k => state[k] && state[k].uid === me && ref.child(k).remove());
   ref.child(id).transaction(cur => cur ? undefined : { name, uid: me, ts: Date.now() });
